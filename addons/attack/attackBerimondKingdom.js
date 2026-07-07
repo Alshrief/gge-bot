@@ -18,6 +18,11 @@ if (require('node:worker_threads').isMainThread)
             },
             {
                 type: "Checkbox",
+                key: "upgradeUnitCamps",
+                default: false
+            },
+            {
+                type: "Checkbox",
                 key: "lowValueChests",
                 default: false
             },
@@ -186,7 +191,7 @@ const { sendXT, waitForResult, events, botConfig } = require("../../ggeBot.js")
 const err = require('../../err.json')
 const units = require("../../items/units.json")
 const buildings = require("../../items/buildings.json")
-const { costTable, getBuildingsByGroup, upgradeBuilding, canAffordBuilding, placeBuilding, hasFreeConstructionSlot } = require('../buildings.js')
+const { upgradeBuilding, canAffordBuilding, placeBuilding, hasFreeConstructionSlot, expandCastle } = require('../buildings.js')
 
 const pluginOptions = botConfig.plugins[require("path").basename(__filename).slice(0, -3)] ?? {}
 
@@ -237,6 +242,15 @@ const eventID = 3
 // Chain: 242 (lvl1) -> 11 (lvl2) -> 243 (lvl3) -> 12 (lvl4)
 const unitCampWodID = 242
 const unitCampChain = [242, 11, 243, 12]
+
+// Returns true if the building costs only wood/stone (no rubies/premium resources)
+function isCampAffordableWithWoodAndStone(buildingInfo) {
+    const rubyFields = ["costC2", "costC1", "costAquamarine", "costGlass", "costIron",
+        "costOil", "costCoal", "costLegendaryToken", "costLegendaryMaterial", "costPlaster",
+        "costDragonScaleTile", "costImperialDucat", "costGoldToken", "costFloraToken",
+        "costCommonStraw", "costSceatToken", "costRareNails", "costRareGlue"]
+    return rubyFields.every(field => Number(buildingInfo[field] ?? 0) === 0)
+}
 
 function getBerimondTroopCountSetting() {
     const parsed = Number(pluginOptions.troopCount ?? minTroopCount)
@@ -373,66 +387,101 @@ events.on("eventStart", async eventInfo => {
     }
 
     const castle = castles.find(e => e.kingdomID == kingdomID && e.areaInfo.type == AreaType.beriCastle)
-    const checkIfCanUpgradeBuilding = () => setCastle(castle, async () => {
-        try {
-            let upgrade = false
-            while (true) {
-                const result623 = getBuildingsByGroup(castle, 623)
-                if (!result623 || result623.length == 0) break
-                const { building, ownerID } = result623[0]
-                const newBuildingInfo = buildings.find(e => e.wodID == building.upgradeWodID)
+    // لو upgradeUnitCamps مفعّل بس buildUnitCamp مش مفعّل → لا يبني ولا يرقي
+    const campBuildEnabled = pluginOptions.buildUnitCamp !== false
+    const campUpgradeEnabled = pluginOptions.upgradeUnitCamps === true
 
-                if (!newBuildingInfo)
-                    break
-
-                if (!canAffordBuilding(castle, newBuildingInfo))
-                    break
-
-                await upgradeBuilding(castle, ownerID)
-                console.log("Upgraded building")
-                upgrade = true
-            }
-            while (true) {
-                const result627 = getBuildingsByGroup(castle, 627)
-                if (!result627 || result627.length == 0) break
-                const { building, ownerID } = result627[0]
-                const newBuildingInfo = buildings.find(e => e.wodID == building.upgradeWodID)
-
-                if (!newBuildingInfo)
-                    break
-
-                if (!canAffordBuilding(castle, newBuildingInfo))
-                    break
-
-                await upgradeBuilding(castle, ownerID)
-                console.log("Upgraded building")
-                upgrade = true
-            }
-
-            if (upgrade)
-                castle.emit("resourceUpdate")
-        } catch (e) {
-            console.debug("checkIfCanUpgradeBuilding error:", e)
-        }
-    })
-    const checkIfCanBuildUnitCamp = () => setCastle(castle, async () => {
-        if (pluginOptions.buildUnitCamp === false)
+    // دالة مستقلة لبناء وترقية المخيمات بالترتيب الصحيح:
+    // 1) يوسع القلعة لأقصى حد
+    // 2) يبني مخيمات لأقصى عدد ممكن
+    // 3) يرقي المخيمات بعد اكتمال البناء (لو الترقية مفعّلة)
+    const manageCamps = () => setCastle(castle, async () => {
+        if (!campBuildEnabled && !campUpgradeEnabled)
             return
-        if (castle.buildings.some(b => unitCampChain.includes(b.wodID)))
-            return // already built (any level) - nothing to do
+        // لو الترقية مفعّلة بس البناء لأ → لا تعمل شيء
+        if (!campBuildEnabled)
+            return
         try {
-            const ownerID = await placeBuilding(castle, unitCampWodID)
-            console.log("builtUnitCamp", ownerID)
-            castle.emit("resourceUpdate")
+            const unitCampInfo = buildings.find(e => e?.wodID == unitCampWodID)
+            if (!unitCampInfo) return
+
+            // --- المرحلة 1: بناء المخيمات (يوسع ثم يبني بشكل متناوب) ---
+            let builtAny = false
+            // حاول التوسعة والبناء بشكل متناوب حتى ما يقدرش يبني أكتر
+            while (true) {
+                // أولاً: حاول توسيع القلعة (لو فشلت أو انتهت مهلتها، نكمل للبناء)
+                try {
+                    const expanded = await expandCastle(castle)
+                    if (expanded) {
+                        console.log("[بيريموند] تم توسيع القلعة")
+                        castle.emit("resourceUpdate")
+                    }
+                } catch (expandErr) {
+                    console.debug("[بيريموند] فشل توسيع القلعة (سنكمل للبناء):", expandErr.message)
+                }
+
+                // ثانياً: حاول بناء مخيم جديد
+                const alreadyBuiltCount = castle.buildings.filter(b => unitCampChain.includes(b.wodID)).length
+                const hasFreeSlot = hasFreeConstructionSlot(castle)
+                const canAfford = isCampAffordableWithWoodAndStone(unitCampInfo) && canAffordBuilding(castle, unitCampInfo)
+
+                if (!hasFreeSlot || !canAfford) {
+                    // إذا لم يستطع بناء مخيم جديد، اخرج من الحلقة
+                    break
+                }
+
+                try {
+                    const ownerID = await placeBuilding(castle, unitCampWodID)
+                    console.log("[بيريموند] تم بناء مخيم جديد، ownerID:", ownerID)
+                    builtAny = true
+                    castle.emit("resourceUpdate")
+                } catch (buildErr) {
+                    // NO_FREE_CONSTRUCTION_SLOTS أو NOT_ENOUGH_RESOURCE أو NO_VALID_POSITION → توقف
+                    console.log("[بيريموند] توقف بناء المخيمات:", buildErr.message || buildErr)
+                    break
+                }
+            }
+
+            // --- المرحلة 2: ترقية المخيمات (بعد اكتمال البناء) ---
+            if (campUpgradeEnabled) {
+                while (true) {
+                    const upgradableCamps = castle.buildings.filter(b => {
+                        if (!unitCampChain.includes(b.wodID)) return false
+                        const info = buildings.find(e => e?.wodID == b.wodID)
+                        return info?.upgradeWodID != null
+                    })
+
+                    let upgradedAny = false
+                    for (const campBuilding of upgradableCamps) {
+                        const info = buildings.find(e => e?.wodID == campBuilding.wodID)
+                        const nextInfo = buildings.find(e => e?.wodID == info?.upgradeWodID)
+                        if (!nextInfo) continue
+                        if (!isCampAffordableWithWoodAndStone(nextInfo)) continue
+                        if (!canAffordBuilding(castle, nextInfo)) continue
+                        if (!hasFreeConstructionSlot(castle)) continue
+
+                        try {
+                            await upgradeBuilding(castle, campBuilding.ownerID)
+                            console.log("[بيريموند] تم ترقية مخيم ownerID:", campBuilding.ownerID)
+                            upgradedAny = true
+                            castle.emit("resourceUpdate")
+                            break // اخرج من حلقة المعسكرات لإعادة فحص القائمة بعد الترقية
+                        } catch (upErr) {
+                            console.debug("[بيريموند] فشل ترقية المخيم:", upErr.message)
+                        }
+                    }
+
+                    if (!upgradedAny) {
+                        break
+                    }
+                }
+            }
         } catch (e) {
-            // Expected/benign: NO_FREE_CONSTRUCTION_SLOTS, NOT_ENOUGH_RESOURCE, NO_VALID_POSITION
-            console.debug("checkIfCanBuildUnitCamp:", e.message)
+            console.debug("[بيريموند] manageCamps error:", e.message ?? e)
         }
     })
-    castle.on("resourceUpdate", checkIfCanUpgradeBuilding)
-    checkIfCanUpgradeBuilding()
-    castle.on("resourceUpdate", checkIfCanBuildUnitCamp)
-    checkIfCanBuildUnitCamp()
+    castle.on("resourceUpdate", manageCamps)
+    manageCamps()
 
     const refreshTimer = setInterval(async () => {
         if (quit) {

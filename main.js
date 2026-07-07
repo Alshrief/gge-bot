@@ -906,9 +906,14 @@ async function start() {
     pluginData.push(...require('./plugins-personal'))
   } catch { }
 
-  const plugins = pluginData
+  const pluginsRaw = pluginData
     .map(e => new Object({ key: path.basename(e[0]), filename: e[0], description: e[1].description, force: e[1].force, pluginOptions: e[1]?.pluginOptions, hidden: e[1].hidden }))
     .sort((a, b) => (a.force ?? 0) - (b.force ?? 0))
+
+  // إزالة المكرر: لو نفس الـ key موجود في addons وaddons-extra، نفضّل addons-extra
+  const seenKeys = new Map()
+  pluginsRaw.forEach(p => seenKeys.set(p.key, p)) // آخر قيمة تفوز (addons-extra يأتي بعد addons)
+  const plugins = [...seenKeys.values()].sort((a, b) => (a.force ?? 0) - (b.force ?? 0))
 
   pluginData = undefined
 
