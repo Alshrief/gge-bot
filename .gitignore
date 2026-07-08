@@ -14,3 +14,4 @@ backup_temp/
 old/
 *.txt
 berimond_shield_counter_*.json
+*.db
