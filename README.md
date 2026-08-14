@@ -1,5 +1,5 @@
 # GGE-BOT
-
+(النسخه دي مطوره وفيها كل حاجه **وياصباح العسل بالياسمين تقدر تشوف تحت خالص لو حبيت لان في حاجه مميزه ممكن تخليني ارجع اطور البوت من تاني**)
 > [!IMPORTANT]
 > 📢 **هام جداً للمشتركين / Important for Subscribers**
 > 
@@ -7,6 +7,9 @@
 > - **تيليجرام:** [@gangcard](https://t.me/gangcard)
 > - **ديسكورد:** `ahmedlord4673`
 >
+- [Writing your own plugin](#writing-your-own-plugin)
+- [Support](#support)
+
 > **English:** This public repository does not include the premium/extra plugins (`addons-extra`) by default. If you are a subscriber or have purchased the bot and want to get access to these extra plugins, please contact the developer:
 > - **Telegram:** [@gangcard](https://t.me/gangcard)
 > - **Discord:** `ahmedlord4673`
@@ -42,9 +45,6 @@ Everything runs on your own machine. No accounts on external services, no creden
 - [Database](#database)
 - [Config file](#config-file)
 - [Getting started](#getting-started)
-- [Writing your own plugin](#writing-your-own-plugin)
-- [Support](#support)
-
 ---
 
 ## How it works
@@ -582,7 +582,7 @@ TKx9pn6eGFEEMUhr1Br5cHqHh7age4nBKU
 ```
 0x03544B54fAc69a1616618aABDBBe31cBDe650ED1
 ```
-
+(**الدعم ممكن يخليني ارجع لتطوير البوت من جديد**) (**Your support might enable me to go back to developing the bot.**)
 ---
 
 Repository: [github.com/Alshrief/NEW-GGE-BOT](https://github.com/Alshrief/new-gge-bot)
