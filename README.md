@@ -18,10 +18,10 @@ A self-hosted automation bot for Goodgame Empire. Runs on Node.js, has a web das
 
 ---
 
-![Stars](https://img.shields.io/github/stars/Alshrief/GGE-BOT?style=flat-square&label=Stars)
-![Forks](https://img.shields.io/github/forks/Alshrief/GGE-BOT?style=flat-square&label=Forks)
-![Watchers](https://img.shields.io/github/watchers/Alshrief/GGE-BOT?style=flat-square&label=Watchers)
-![Issues](https://img.shields.io/github/issues/Alshrief/GGE-BOT?style=flat-square)
+![Stars](https://img.shields.io/github/stars/Alshrief/gge-bot?style=flat-square&label=Stars)
+![Forks](https://img.shields.io/github/forks/Alshrief/gge-bot?style=flat-square&label=Forks)
+![Watchers](https://img.shields.io/github/watchers/Alshrief/gge-bot?style=flat-square&label=Watchers)
+![Issues](https://img.shields.io/github/issues/Alshrief/gge-bot?style=flat-square)
 ![Node Version](https://img.shields.io/badge/node-%3E%3D22-brightgreen?style=flat-square)
 
 ---
