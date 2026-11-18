@@ -272,7 +272,7 @@ async function clientGetNextMapObject(type, kingdomID) {
     return { areaInfo: new ServerGetAreaInfo(obj.gaa, result).areaInfo[0], result: 0 }
 }
 
-const limiter = new RateLimiter({ tokensPerInterval: 5, interval: "second" })
+const limiter = new RateLimiter({ tokensPerInterval: 2, interval: "second" })
 /**
  * @type { CastleInfo }
  */
@@ -307,12 +307,21 @@ async function getAreaInfo(kingdomID, fromX, fromY, toX, toY) {
             yCoords.push([y, Math.min(maxY, y + 100)])
         }
 
+        // Limit maximum chunks per request to prevent excessive map scanning (anti-ban protection)
+        if (xCoords.length * yCoords.length > 16) {
+            console.warn(`[Anti-Ban] Requested map area [${minX},${minY}] to [${maxX},${maxY}] is too large (${xCoords.length * yCoords.length} chunks). Truncating to safe scan bounds.`)
+            xCoords.splice(4)
+            yCoords.splice(4)
+        }
+
         const allAreas = []
         let finalResult = 0
         let responseObj = null
 
         for (const [x1, x2] of xCoords) {
             for (const [y1, y2] of yCoords) {
+                // Realistic human-like delay between chunk requests to avoid spamming the game server
+                await new Promise(resolve => setTimeout(resolve, 1200 + Math.floor(Math.random() * 800)))
                 const res = await getAreaInfo(kingdomID, x1, y1, x2, y2)
                 if (!responseObj && res) {
                     responseObj = res
@@ -349,14 +358,17 @@ async function getAreaInfo(kingdomID, fromX, fromY, toX, toY) {
     
     if(!response) {
         try {
-            await limiter.removeTokens(1).then(() => setCastle(undefined, () =>
+            await limiter.removeTokens(1)
+            // Human-like pause before sending GAA packet
+            await new Promise(resolve => setTimeout(resolve, 400 + Math.floor(Math.random() * 400)))
+            await setCastle(undefined, () =>
                 sendXT("gaa", JSON.stringify({
                     KID: Number(kingdomID),
                     AX1: Number(fromX),
                     AY1: Number(fromY),
                     AX2: Number(toX),
                     AY2: Number(toY)
-                }))))
+                })))
             const [o, result] = await waitForResult("gaa", 1000 * 20, (obj, result) => {
                 if (Number(result) != 0)
                     return true
@@ -398,7 +410,7 @@ async function getAreaInfo(kingdomID, fromX, fromY, toX, toY) {
                 response.areaInfo = []
             }
             if (response.result == 0 || response == 0)
-                myCache.set(key, response, 60)
+                myCache.set(key, response, 600) // Cache for 10 minutes (prevents frequent re-fetching)
         } catch (e) {
             console.warn("getAreaInfo error or timeout:", e)
             response = new ServerGetAreaInfo({ result: -1 })

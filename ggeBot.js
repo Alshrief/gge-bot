@@ -24,7 +24,7 @@ const ggeConfig = require("./ggeConfig.json")
 const ActionType = require("./actions.json")
 const err = require("./err.json")
 
-const limiter = new RateLimiter({ tokensPerInterval: 5, interval: "sec" })
+const limiter = new RateLimiter({ tokensPerInterval: 2, interval: "sec" })
 const events = new EventEmitter()
 const xtHandler = new EventEmitter()
 events.setMaxListeners(100)
@@ -107,9 +107,11 @@ if (!botConfig.internalWorker) {
 let requestCount = 0
 async function sendXT(cmdName, paramObj) {
     try {
-    console.debug(cmdName, JSON.parse(paramObj))
+        console.debug(cmdName, JSON.parse(paramObj))
     } catch {}
     await limiter.removeTokens(1)
+    // Human-like randomized micro-delay to prevent burst patterns
+    await new Promise(r => setTimeout(r, 120 + Math.floor(Math.random() * 180)))
     requestCount++
     webSocket.send(`%xt%${botConfig.gameServer}%${cmdName}%1%${paramObj}%`)
 }
@@ -194,9 +196,18 @@ const waitForResult = (key, timeout, func) => new Promise((resolve, reject) => {
     xtHandler.addListener(key, helperFunction)
 })
 
+const GAME_BUILD_NUMBER = "1173009"
+
 const socketOptions = {
     skipUTF8Validation: ggeConfig.skipUTF8Validation ? true : false,
-    handshakeTimeout: 15000
+    handshakeTimeout: 15000,
+    headers: {
+        'Origin': 'https://empire.goodgamestudios.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+    }
 }
 
 if (botConfig.proxyEnabled && botConfig.proxyHost && botConfig.proxyPort && botConfig.proxyType) {
@@ -285,11 +296,11 @@ webSocket.onmessage = ({data : message}) => {
     else if (message[0] == "<") {
         switch (message) {
             case "<msg t='sys'><body action='apiOK' r='0'></body></msg>":
-                webSocket.send(`<msg t="sys"><body action="login" r="0"><login z="${botConfig.gameServer}"><nick><![CDATA[]]></nick><pword><![CDATA[undefined%en%0]]></pword></login></body></msg>`)
+                webSocket.send(`<msg t="sys"><body action="login" r="0"><login z="${botConfig.gameServer}"><nick><![CDATA[]]></nick><pword><![CDATA[${GAME_BUILD_NUMBER}%en%0]]></pword></login></body></msg>`)
                 break
             case "<msg t='sys'><body action='joinOK' r='1'><pid id='0'/><vars /><uLs r='1'></uLs></body></msg>":
                 webSocket.send('<msg t="sys"><body action="roundTrip" r="1"></body></msg>')
-                sendXT("vck", `undefined%web-html5%<RoundHouseKick>%${(Math.random() * Number.MAX_VALUE).toFixed()}`)
+                sendXT("vck", `${GAME_BUILD_NUMBER}%web-html5%%${(Math.random() * Number.MAX_VALUE).toFixed()}`)
                 break
             case "<msg t='sys'><body action='roundTripRes' r='1'></body></msg>":
                 break

@@ -39,8 +39,9 @@ class FortressKingdomAttacker {
 
     async updateAreas() {
         this.areas = []
+        const maxScanChunks = 9 // Safe 3x3 search around castle (prevents massive map flood)
         done:
-        for (let i = 0, j = 0; i < 13 * 13; i++) {
+        for (let i = 0, j = 0; i < maxScanChunks; i++) {
             let rX, rY
             let rect
             do {
@@ -54,7 +55,7 @@ class FortressKingdomAttacker {
                     w: this.castle.areaInfo.x + rX + 50,
                     h: this.castle.areaInfo.y + rY + 50
                 }
-                if (j > Math.pow(13 * 13, 2))
+                if (j > Math.pow(maxScanChunks, 2))
                     break done
             } while ((this.castle.areaInfo.x + rX) <= -50 ||
             (this.castle.areaInfo.y + rY) <= -50 || (this.castle.areaInfo.x + rX) >= (1286 + 50) || (this.castle.areaInfo.y + rY) >= (1286 + 50))
@@ -70,6 +71,11 @@ class FortressKingdomAttacker {
 
             const fetched = (await ClientCommands.getAreaInfo(this.kingdomID, rect.x, rect.y, rect.w, rect.h)).areaInfo.filter(e => e.type == type)
             this.areas.push(...fetched)
+
+            if (this.areas.length >= 8) {
+                break done
+            }
+            await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 800)))
         }
 
         this.areas.sort((a, b) =>

@@ -25,8 +25,9 @@ events.once("load", async () => {
 
     /** @type {Array<import("../../protocols.js").Types.GAAAreaInfo>} */
     const areas = []
+    const maxScanChunks = 9 // Safe 3x3 search area around castle
     done:
-    for (let i = 0, j = 1; i < 13 * 13; i++) {
+    for (let i = 0, j = 1; i < maxScanChunks; i++) {
         let rX, rY
         let rect
         do {
@@ -41,7 +42,7 @@ events.once("load", async () => {
                 w: castle.areaInfo.x + rX + 50,
                 h: castle.areaInfo.y + rY + 50
             }
-            if (j > Math.pow(13 * 13, 2))
+            if (j > Math.pow(maxScanChunks, 2))
                 break done
         } while ((castle.areaInfo.x + rX) <= -50 || (castle.areaInfo.y + rY) <= -50 || (castle.areaInfo.x + rX) >= (1286 + 50) || (castle.areaInfo.y + rY) >= (1286 + 50))
         rect.x = rect.x < 0 ? 0 : rect.x
@@ -52,13 +53,15 @@ events.once("load", async () => {
         rect.y = rect.y > 1286 ? 1286 : rect.y
         rect.w = rect.w > 1286 ? 1286 : rect.w
         rect.h = rect.h > 1286 ? 1286 : rect.h
-        let attemptsLeft = 5
+        let attemptsLeft = 3
         while(true) {
             try {
                 areas.push(...(await ClientCommands.getAreaInfo(kingdomID, rect.x, rect.y, rect.w, rect.h)).areaInfo
                     .filter(ai => ai.type == type)
                     .filter(ai => [3, 6].includes(ai.extraData[5])))
-                    break
+                if (areas.length >= 8) break done
+                await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 800)))
+                break
             }
             catch { 
                 attemptsLeft-- 

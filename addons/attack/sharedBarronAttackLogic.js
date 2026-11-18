@@ -54,9 +54,11 @@ class BarronKingdomAttacker {
             [AreaType.externalKingdom, AreaType.mainCastle].includes(e.areaInfo?.type))
         if (!this.castle) return
         try {
+            // Safe search radius around the castle (e.g. 40 tiles = 80x80 box, 1 single chunk) to avoid spamming the map
+            const radius = Math.min(60, Math.max(25, Number(this.options?.searchRadius) || 40))
             this.areas = (await ClientCommands.getAreaInfo(this.kingdomID,
-                this.castle.areaInfo.x - 250, this.castle.areaInfo.y - 250,
-                this.castle.areaInfo.x + 250, this.castle.areaInfo.y + 250))
+                this.castle.areaInfo.x - radius, this.castle.areaInfo.y - radius,
+                this.castle.areaInfo.x + radius, this.castle.areaInfo.y + radius))
                 .areaInfo.filter(ai => ai.type == this.type).sort((a, b) =>
                     (Math.pow(this.castle.areaInfo.x - a.x, 2) + Math.pow(this.castle.areaInfo.y - a.y, 2)) -
                     (Math.pow(this.castle.areaInfo.x - b.x, 2) + Math.pow(this.castle.areaInfo.y - b.y, 2)))

@@ -5,6 +5,12 @@ echo "==================================================="
 echo "             GGE BOT Installation Setup            "
 echo "==================================================="
 echo
+echo "[IMPORTANT] This script will perform a complete installation:"
+echo " 1. Verify Node.js environment"
+echo " 2. Setup addons-extra repository"
+echo " 3. Install core dependencies"
+echo " 4. Install website dependencies and build dashboard"
+echo
 
 # Step 1: Check Node.js installation
 if ! command -v node &> /dev/null; then
@@ -14,7 +20,6 @@ if ! command -v node &> /dev/null; then
     echo "Please download and install it from:"
     echo "https://nodejs.org/en/download/current"
     echo
-    # Attempt to open browser based on OS
     if [[ "$OSTYPE" == "darwin"* ]]; then
         open "https://nodejs.org/en/download/current"
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -45,7 +50,7 @@ if [ ! -d "addons-extra" ]; then
     fi
 fi
 
-# Step 3: Check Git and download/update addons-extra
+# Step 2b: Check Git and download/update addons-extra
 if command -v git &> /dev/null; then
     if [ ! -d "addons-extra" ]; then
         echo "[2/4] Git detected. Cloning addons-extra repository..."
@@ -57,7 +62,7 @@ if command -v git &> /dev/null; then
             git pull origin main
             cd ..
         else
-            echo "[2/4] Git detected. addons-extra exists (manually downloaded). Skipping pull updates."
+            echo "[2/4] addons-extra exists (manual download). Skipping pull updates."
         fi
     fi
 else
@@ -76,7 +81,13 @@ echo
 
 # Step 4: Install and build website dependencies
 echo "[4/4] Installing and building dashboard website..."
+if [ ! -d "website" ]; then
+    echo -e "\033[0;31m[ERROR] Directory 'website' not found!\033[0m"
+    exit 1
+fi
+
 cd website
+echo "Installing website packages..."
 npm install
 if [ $? -ne 0 ]; then
     echo -e "\033[0;31m[ERROR] Failed to install website dependencies.\033[0m"
@@ -84,7 +95,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Building dashboard..."
+echo "Building dashboard assets (Vite)..."
 npm run build
 if [ $? -ne 0 ]; then
     echo -e "\033[0;31m[ERROR] Failed to build website assets.\033[0m"
@@ -94,8 +105,11 @@ fi
 cd ..
 echo
 
-echo "==================================================="
-echo "  Installation completed successfully!"
-echo "  You can now start the bot using './start_bot.sh'."
-echo "==================================================="
+# Make start.sh executable
+chmod +x start.sh start_bot.sh 2>/dev/null
+
+echo -e "\033[0;32m===================================================\033[0m"
+echo -e "\033[0;32m  Installation completed successfully!\033[0m"
+echo -e "\033[0;32m  You can now start the bot using './start.sh'.\033[0m"
+echo -e "\033[0;32m===================================================\033[0m"
 echo

@@ -689,8 +689,9 @@ events.once("load", async () => {
         }
     }
 
+    const maxScanChunks = 9 // Safe 3x3 search area around castle
     done:
-    for (let i = 0, j = 0; i < 13 * 13; i++) {
+    for (let i = 0, j = 0; i < maxScanChunks; i++) {
         let rX, rY, rect
         do {
             ;({ x: rX, y: rY } = spiralCoordinates(j++))
@@ -702,7 +703,7 @@ events.once("load", async () => {
                 w: castle.areaInfo.x + rX + 50,
                 h: castle.areaInfo.y + rY + 50
             }
-            if (j > Math.pow(13 * 13, 2)) break done
+            if (j > Math.pow(maxScanChunks, 2)) break done
         } while ((castle.areaInfo.x + rX) <= -50 || (castle.areaInfo.y + rY) <= -50 || (castle.areaInfo.x + rX) >= (1286 + 50) || (castle.areaInfo.y + rY) >= (1286 + 50))
 
         rect.x = Math.max(0, Math.min(1286, rect.x))
@@ -714,6 +715,8 @@ events.once("load", async () => {
             .areaInfo.filter(ai => ai.type == type).sort((a, b) =>
                 (Math.pow(castle.areaInfo.x - a.x, 2) + Math.pow(castle.areaInfo.y - a.y, 2)) -
                 (Math.pow(castle.areaInfo.x - b.x, 2) + Math.pow(castle.areaInfo.y - b.y, 2))))
+
+        await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 800)))
 
         if (areas.every(ai => ![7, 8, 9].includes(ai.extraData[2]))) continue
 

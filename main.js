@@ -933,30 +933,22 @@ async function start() {
     return filteredPlugins
   }
 
-  // Seed default admin account if table is empty
+  // Check for admin user in database (if none, first user to register will automatically become Admin)
   const usersCountRow = userDatabase.prepare('SELECT COUNT(*) as count FROM Users').get()
-  if (usersCountRow.count === 0) {
-    const defaultAdminUsername = 'adminuser'
-    // Generate a secure random password on first run — never hardcode credentials
-    const defaultAdminPassword = crypto.randomBytes(12).toString('hex')
-    const salt = crypto.randomBytes(256)
-    const passwordHash = crypto.pbkdf2Sync(defaultAdminPassword, salt, 600000, 64, 'sha256')
-    const uuid = crypto.randomUUID()
-
-    // Seed user
-    userDatabase.prepare('INSERT INTO Users (username, passwordHash, passwordSalt, uuid, privilege, maxGameAccounts, credits, subscriptionPlan, subscriptionExpiry) VALUES(?,?,?,?,?,?,?,?,?)')
-      .run(defaultAdminUsername, passwordHash, salt, uuid, 1, 999, 1000, 'master', '2030-12-31')
-
-    userDatabase.prepare('INSERT INTO SubUsers (uuid, name, pass, plugins, state, externalEvent, server, proxyHost, proxyPort, proxyUser, proxyPass, proxyType, proxyEnabled) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(uuid, 'example@gmail.com', '', '{}', 0, 0, 34, "", null, "", "", "SOCKS5", 0)
-
-    console.warn("==================================================")
-    console.warn("CRITICAL: No users found in database.")
-    console.warn("CRITICAL: Created default Admin account!")
-    console.warn(`CRITICAL: Username: ${defaultAdminUsername}`)
-    console.warn(`CRITICAL: Password: ${defaultAdminPassword}`)
-    console.warn("CRITICAL: Please log in and change this password immediately!")
-    console.warn("==================================================")
+  const adminCountRow = userDatabase.prepare('SELECT COUNT(*) as count FROM Users WHERE privilege = 1').get()
+  if (usersCountRow.count === 0 || adminCountRow.count === 0) {
+    // If the database only contains the legacy dummy 'adminuser', clean it up so the real user becomes the Admin
+    if (usersCountRow.count === 1) {
+      const dummyAdmin = userDatabase.prepare("SELECT username FROM Users WHERE username = 'adminuser'").get()
+      if (dummyAdmin) {
+        userDatabase.prepare("DELETE FROM Users WHERE username = 'adminuser'").run()
+        userDatabase.prepare("DELETE FROM SubUsers WHERE name = 'example@gmail.com'").run()
+      }
+    }
+    console.info("==================================================")
+    console.info("ℹ️ [First-Time Setup] No admin account detected.")
+    console.info("ℹ️ The first user to register through the web dashboard will automatically be granted ADMIN privileges!")
+    console.info("==================================================")
   }
 
   const loginCheck = uuid =>
@@ -1207,6 +1199,11 @@ async function start() {
         return res.send(JSON.stringify({ id: 1, r: 1, error: 'All fields are required.' }))
       }
 
+      // Check if this is the first registered user or if no admin exists yet
+      const existingAdminsCount = userDatabase.prepare('SELECT COUNT(*) as count FROM Users WHERE privilege = 1').get().count
+      const totalUsersCount = userDatabase.prepare('SELECT COUNT(*) as count FROM Users').get().count
+      const isFirstUser = (existingAdminsCount === 0 || totalUsersCount === 0)
+
       // 1. Username validations
       if (typeof username !== 'string' || username.length < 3 || username.length > 30) {
         return res.send(JSON.stringify({ id: 1, r: 1, error: 'Username must be between 3 and 30 characters.' }))
@@ -1223,9 +1220,9 @@ async function start() {
         return res.send(JSON.stringify({ id: 1, r: 1, error: 'Username cannot contain highly repetitive character patterns.' }))
       }
 
-      // Block common test/reserved usernames
+      // Block common test/reserved usernames ONLY if not the first user/admin
       const bannedKeywords = ['test', 'testing', 'admin', 'administrator', 'guest', 'support', 'staff', 'moderator', 'owner', 'bot', 'system']
-      if (bannedKeywords.includes(username.toLowerCase())) {
+      if (!isFirstUser && bannedKeywords.includes(username.toLowerCase())) {
         return res.send(JSON.stringify({ id: 1, r: 1, error: 'This username is reserved or not allowed.' }))
       }
 
@@ -1262,7 +1259,7 @@ async function start() {
       // Block known temporary / disposable email domains
       const disposableDomains = [
         'yopmail.com', 'tempmail.com', 'temp-mail.org', '10minutemail.com',
-        'guerrillamail.com', 'sharklasers.com', 'mailinator.com', 'dispostable.com',
+        'sharklasers.com', 'mailinator.com', 'dispostable.com',
         'getairmail.com', 'maildrop.cc', 'tempmail.net', 'fakeinbox.com',
         'throwawaymail.com', 'tempmailaddress.com', 'burnermail.io'
       ]
@@ -1295,9 +1292,15 @@ async function start() {
         const passwordHash = await hashPassword(password, salt)
         const uuid = crypto.randomUUID()
 
-        // Create user in Users
+        const privilege = isFirstUser ? 1 : 0
+        const maxGameAccounts = isFirstUser ? 999 : 1
+        const credits = isFirstUser ? 9999 : 0
+        const subscriptionPlan = isFirstUser ? 'master' : 'none'
+        const subscriptionExpiry = isFirstUser ? '2099-12-31' : null
+
+        // Create user in Users (First user automatically gets ADMIN privilege = 1)
         userDatabase.prepare("INSERT INTO Users (username, passwordHash, passwordSalt, uuid, privilege, maxGameAccounts, credits, subscriptionPlan, subscriptionExpiry) VALUES(?,?,?,?,?,?,?,?,?)")
-          .run(username, passwordHash, salt, uuid, 0, 1, 0, 'none', null)
+          .run(username, passwordHash, salt, uuid, privilege, maxGameAccounts, credits, subscriptionPlan, subscriptionExpiry)
 
         // Create first game account in SubUsers with an empty password by default
         userDatabase.prepare('INSERT INTO SubUsers (uuid, name, pass, plugins, state, externalEvent, server, proxyHost, proxyPort, proxyUser, proxyPass, proxyType, proxyEnabled) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -1306,8 +1309,12 @@ async function start() {
         // Record this registration IP
         recordRegister(clientIp)
 
+        if (isFirstUser) {
+          console.log(`\n👑 [Admin Initialized] User "${username}" (${email}) registered as the first user and has been granted full ADMIN privileges!\n`)
+        }
+
         // Notify Admins
-        sendAdminTelegramNotification(`🆕 *New User Registered*\n*Username:* ${username}\n*Email:* ${email}\n*Server:* ${server}`)
+        sendAdminTelegramNotification(`🆕 *New User Registered* ${isFirstUser ? '👑 *(ADMIN)*' : ''}\n*Username:* ${username}\n*Email:* ${email}\n*Server:* ${server}`)
 
         // Create session and set HttpOnly cookie
         const session = createSession(uuid, false)

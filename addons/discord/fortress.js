@@ -23,8 +23,10 @@ events.once("load", async () => {
 
     for (let kingdomID = 1; kingdomID < 4; kingdomID++) {
         const castle = castles.find(e => e.kingdomID == kingdomID && [AreaType.externalKingdom, AreaType.mainCastle].includes(e.areaInfo.type))
+        if (!castle) continue
+        const maxScanChunks = 9 // Safe 3x3 search area around castle
         done:
-        for (let i = 0, j = 0; i < 13 * 13; i++) {
+        for (let i = 0, j = 0; i < maxScanChunks; i++) {
             let rX, rY
             let rect
             do {
@@ -38,7 +40,7 @@ events.once("load", async () => {
                     w: castle.areaInfo.x + rX + 50,
                     h: castle.areaInfo.y + rY + 50
                 }
-                if (j > Math.pow(13 * 13, 2))
+                if (j > Math.pow(maxScanChunks, 2))
                     break done
             } while ((castle.areaInfo.x + rX) <= -50 || (castle.areaInfo.y + rY) <= -50 || (castle.areaInfo.x + rX) >= (1286 + 50) || (castle.areaInfo.y + rY) >= (1286 + 50))
             rect.x = rect.x < 0 ? 0 : rect.x
@@ -49,13 +51,15 @@ events.once("load", async () => {
             rect.y = rect.y > 1286 ? 1286 : rect.y
             rect.w = rect.w > 1286 ? 1286 : rect.w
             rect.h = rect.h > 1286 ? 1286 : rect.h
-            let attemptsLeft = 5
+            let attemptsLeft = 3
             do {
                 try {
                     const res = await getAreaInfo(kingdomID, rect.x, rect.y, rect.w, rect.h)
                     if (res && res.areaInfo) {
                         areas.push(...res.areaInfo.filter(e => e.type == type))
                     }
+                    if (areas.length >= 8) break done
+                    await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 800)))
                     break
                 }
                 catch { attemptsLeft-- }

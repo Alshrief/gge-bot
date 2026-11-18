@@ -6,7 +6,11 @@ echo ===================================================
 echo             GGE BOT Installation Setup            
 echo ===================================================
 echo.
-echo [IMPORTANT] This script will perform a first-time installation of GGE BOT dependencies.
+echo [IMPORTANT] This script will perform a complete installation:
+echo  1. Verify Node.js environment
+echo  2. Setup addons-extra repository
+echo  3. Install core dependencies
+echo  4. Install website dependencies and build dashboard
 echo.
 
 :: Step 1: Check Node.js installation
@@ -19,7 +23,7 @@ if %errorlevel% neq 0 (
     echo Press any key to open the official Node.js download page...
     pause >nul
     start "" "https://nodejs.org/en/download/current"
-    exit /b
+    exit /b 1
 )
 
 echo [1/4] Node.js detected.
@@ -42,7 +46,7 @@ if not exist addons-extra (
     )
 )
 
-:: Step 3: Check Git and download/update addons-extra
+:: Step 2b: Check Git and download/update addons-extra
 where git >nul 2>nul
 if %errorlevel% equ 0 (
     if not exist addons-extra (
@@ -55,7 +59,7 @@ if %errorlevel% equ 0 (
             git pull origin main
             cd ..
         ) else (
-            echo [2/4] Git detected. addons-extra exists (manually downloaded). Skipping pull updates.
+            echo [2/4] addons-extra exists (manual download). Skipping pull updates.
         )
     )
 ) else (
@@ -70,29 +74,36 @@ if %errorlevel% neq 0 (
     color 0C
     echo [ERROR] Failed to install core dependencies.
     pause
-    exit /b
+    exit /b 1
 )
 echo.
 
 :: Step 4: Install and build website dependencies
 echo [4/4] Installing and building dashboard website...
+if not exist website (
+    color 0C
+    echo [ERROR] Directory 'website' not found!
+    pause
+    exit /b 1
+)
 cd website
+echo Installing website packages...
 call npm install
 if %errorlevel% neq 0 (
     color 0C
     echo [ERROR] Failed to install website dependencies.
     cd ..
     pause
-    exit /b
+    exit /b 1
 )
-echo Building dashboard...
+echo Building dashboard assets (Vite)...
 call npm run build
 if %errorlevel% neq 0 (
     color 0C
     echo [ERROR] Failed to build website assets.
     cd ..
     pause
-    exit /b
+    exit /b 1
 )
 cd ..
 echo.
@@ -100,7 +111,7 @@ echo.
 color 0A
 echo ===================================================
 echo   Installation completed successfully!
-echo   You can now start the bot using "start_bot.bat".
+echo   You can now start the bot using "start.bat".
 echo ===================================================
 echo.
 pause
